@@ -43,3 +43,21 @@ def frontera_eficiente(cov, mu, n_puntos=50):
     pesos = np.array([cartera_objetivo(cov, mu, r) for r in objetivos])
     vols = np.array([vol_cartera(w, cov) for w in pesos])
     return objetivos, vols, pesos
+
+def ratio_sharpe(w, cov, mu, rf=0.0):
+    """Ratio de Sharpe de la cartera: (rentabilidad - tasa libre de riesgo) / volatilidad."""
+    return (rent_cartera(w, mu) - rf) / vol_cartera(w, cov)
+
+
+def cartera_max_sharpe(cov, mu, rf=0.0):
+    """Pesos de la cartera que maximiza el ratio de Sharpe (suma 1, sin posiciones cortas)."""
+    n = cov.shape[0]
+    w0 = np.repeat(1 / n, n)
+    limites = [(0, 1)] * n
+    restricciones = {"type": "eq", "fun": lambda w: w.sum() - 1}
+
+    resultado = minimize(lambda w: -ratio_sharpe(w, cov, mu, rf), w0,
+                         method="SLSQP", bounds=limites, constraints=restricciones)
+    if not resultado.success:
+        print("Aviso: el optimizador no convergió")
+    return resultado.x
