@@ -114,3 +114,62 @@ def backtest(rentabilidades, tbill, fin_ent, ini_prueba, fin_prueba, inicio="201
         r = pd.Series(prb.values @ w)
         sharpes[nombre] = (r.mean() * 252 - rf_p) / (r.std() * np.sqrt(252))
     return pd.Series(sharpes)
+
+def error_estandar_medias(rentabilidades):
+    """Rentabilidad, volatilidad y error estándar de la rentabilidad media de cada activo.
+
+    rentabilidades: DataFrame de rentabilidades diarias (una columna por activo).
+    El error estándar de la media es la volatilidad anual dividida por la raíz de los años.
+    El intervalo de confianza del 95 % es aproximado (media ± 2 errores estándar).
+    """
+    anios = len(rentabilidades) / 252
+    t = pd.DataFrame({
+        "Rentabilidad anual": rentabilidades.mean() * 252,
+        "Volatilidad anual": rentabilidades.std() * np.sqrt(252),
+    })
+    t["Error estándar"] = t["Volatilidad anual"] / np.sqrt(anios)
+    t["IC 95% inferior"] = t["Rentabilidad anual"] - 2 * t["Error estándar"]
+    t["IC 95% superior"] = t["Rentabilidad anual"] + 2 * t["Error estándar"]
+    return t
+
+
+def error_estandar_sharpe(rentabilidades):
+    """Error estándar aproximado del Sharpe: 1 / raíz de los años (supone rentabilidades independientes)."""
+    return 1 / np.sqrt(len(rentabilidades) / 252)
+
+
+def remuestra_bloques(datos, bloque, rng):
+    """Muestra nueva del mismo tamaño, pegando bloques de `bloque` días elegidos al azar.
+
+    Los bloques conservan la dependencia entre días consecutivos.
+    """
+    T = len(datos)
+    n_bloques = T // bloque
+    inicios = rng.integers(0, T - bloque, size=n_bloques)
+    return np.vstack([datos[i:i + bloque] for i in inicios])
+
+
+def bootstrap_pesos_max_sharpe(rentabilidades, rf, n_rep=200, bloque=21, semilla=42):
+    """Pesos de la cartera de máximo Sharpe en n_rep remuestreos de los datos.
+
+    Devuelve un DataFrame con una fila por remuestreo y una columna por activo.
+    La semilla fija hace que los resultados sean reproducibles.
+    """
+    rng = np.random.default_rng(semilla)
+    datos = rentabilidades.values
+    pesos = []
+    for _ in range(n_rep):
+        m = remuestra_bloques(datos, bloque, rng)
+        mu_b = m.mean(axis=0) * 252
+        cov_b = np.cov(m, rowvar=False) * 252
+        pesos.append(cartera_max_sharpe(cov_b, mu_b, rf))
+    return pd.DataFrame(pesos, columns=rentabilidades.columns)
+
+
+def resumen_pesos(pesos_boot):
+    """Peso medio y percentiles 5 y 95 de cada activo en el bootstrap."""
+    return pd.DataFrame({
+        "Peso medio": pesos_boot.mean(),
+        "Percentil 5": pesos_boot.quantile(0.05),
+        "Percentil 95": pesos_boot.quantile(0.95),
+    })
