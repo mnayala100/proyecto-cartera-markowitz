@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 
 
@@ -73,3 +74,43 @@ def cartera_max_sharpe(cov, mu, rf=0.0):
                          method="SLSQP", bounds=limites, constraints=restricciones)
     _avisar_si_falla(resultado, "el máximo Sharpe")
     return resultado.x
+
+
+def resumen_activos(rent, rf):
+    """Rentabilidad, volatilidad y Sharpe anuales de cada activo en un periodo.
+
+    rent: DataFrame de rentabilidades diarias (una columna por activo).
+    rf: tasa libre de riesgo anual, en tanto por uno.
+    """
+    t = pd.DataFrame({
+        "Rentabilidad": rent.mean() * 252,
+        "Volatilidad": rent.std() * np.sqrt(252),
+    })
+    t["Sharpe"] = (t["Rentabilidad"] - rf) / t["Volatilidad"]
+    return t
+
+
+def backtest(rentabilidades, tbill, fin_ent, ini_prueba, fin_prueba, inicio="2016"):
+    """Optimiza con datos hasta fin_ent y devuelve el Sharpe de cada cartera en la prueba.
+
+    rentabilidades: DataFrame de rentabilidades diarias de los activos.
+    tbill: Serie con la tasa libre de riesgo diaria, en porcentaje.
+    """
+    ent = rentabilidades.loc[inicio:fin_ent]
+    prb = rentabilidades.loc[ini_prueba:fin_prueba]
+    rf_e = tbill.loc[inicio:fin_ent].mean() / 100
+    rf_p = tbill.loc[ini_prueba:fin_prueba].mean() / 100
+
+    mu_e = ent.mean().values * 252
+    cov_e = ent.cov().values * 252
+    n = len(mu_e)
+    pesos = {
+        "Pesos iguales": np.repeat(1 / n, n),
+        "Mín. varianza": cartera_min_varianza(cov_e),
+        "Máx. Sharpe": cartera_max_sharpe(cov_e, mu_e, rf_e),
+    }
+    sharpes = {}
+    for nombre, w in pesos.items():
+        r = pd.Series(prb.values @ w)
+        sharpes[nombre] = (r.mean() * 252 - rf_p) / (r.std() * np.sqrt(252))
+    return pd.Series(sharpes)
