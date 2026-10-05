@@ -149,22 +149,22 @@ def remuestra_bloques(datos, bloque, rng):
     return np.vstack([datos[i:i + bloque] for i in inicios])
 
 
-def bootstrap_pesos_max_sharpe(rentabilidades, rf, n_rep=200, bloque=21, semilla=42):
+def bootstrap_pesos_max_sharpe(rentabilidades, rf, n_rep=200, bloque=21, semilla=42, z=1.0):
     """Pesos de la cartera de máximo Sharpe en n_rep remuestreos de los datos.
 
     Devuelve un DataFrame con una fila por remuestreo y una columna por activo.
     La semilla fija hace que los resultados sean reproducibles.
+    z es la credibilidad de las medias (1 = sin shrinkage).
     """
     rng = np.random.default_rng(semilla)
     datos = rentabilidades.values
     pesos = []
     for _ in range(n_rep):
         m = remuestra_bloques(datos, bloque, rng)
-        mu_b = m.mean(axis=0) * 252
+        mu_b = medias_shrinkage(pd.DataFrame(m), z, rf).values
         cov_b = np.cov(m, rowvar=False) * 252
         pesos.append(cartera_max_sharpe(cov_b, mu_b, rf))
     return pd.DataFrame(pesos, columns=rentabilidades.columns)
-
 
 def resumen_pesos(pesos_boot):
     """Peso medio y percentiles 5 y 95 de cada activo en el bootstrap."""
@@ -173,3 +173,10 @@ def resumen_pesos(pesos_boot):
         "Percentil 5": pesos_boot.quantile(0.05),
         "Percentil 95": pesos_boot.quantile(0.95),
     })
+
+def medias_shrinkage(rentabilidades, z, rf, dias=252):
+    medias = rentabilidades.mean() * dias
+    vols = rentabilidades.std() * np.sqrt(dias)
+    sharpe_medio = ((medias - rf) / vols).mean()
+    prior = rf + sharpe_medio * vols
+    return z * medias + (1 - z) * prior
