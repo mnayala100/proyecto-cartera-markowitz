@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from scipy.stats import norm
 
 
 def vol_cartera(w, cov):
@@ -183,3 +184,34 @@ def medias_shrinkage(rentabilidades, z, rf, dias=252):
     sharpe_medio = ((medias - rf) / vols).mean()
     prior = rf + sharpe_medio * vols
     return z * medias + (1 - z) * prior
+
+def var_historico(rend, nivel=0.95):
+    """VaR histórico: cuantil `nivel` de las pérdidas (pérdida = -rendimiento)."""
+    perdidas = -np.asarray(rend)
+    return np.quantile(perdidas, nivel)
+
+
+def tvar_historico(rend, nivel=0.95):
+    """TVaR histórico: pérdida media en los días en que se supera o iguala el VaR."""
+    perdidas = -np.asarray(rend)
+    var = np.quantile(perdidas, nivel)
+    return perdidas[perdidas >= var].mean()
+
+
+def excedencias(rend, var):
+    """Número de días en que la pérdida supera un VaR dado."""
+    return int((-np.asarray(rend) > var).sum())
+
+def dif_tvar_normal(rend, bloque, q=0.99, n_rep=500, semilla=42):
+    rng = np.random.default_rng(semilla)
+    z = norm.ppf(q)
+    res = []
+    for _ in range(n_rep):
+        m = remuestra_bloques(rend.values, bloque, rng)
+        fila = []
+        for j in range(m.shape[1]):
+            mu, sigma = m[:, j].mean(), m[:, j].std(ddof=1)
+            tvar_norm = -mu + sigma * norm.pdf(z) / (1 - q)
+            fila.append(tvar_historico(m[:, j], q) - tvar_norm)
+        res.append(fila)
+    return pd.DataFrame(res, columns=rend.columns)
