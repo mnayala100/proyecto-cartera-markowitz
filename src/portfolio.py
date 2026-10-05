@@ -90,25 +90,28 @@ def resumen_activos(rent, rf):
     return t
 
 
-def backtest(rentabilidades, tbill, fin_ent, ini_prueba, fin_prueba, inicio="2016"):
+def backtest(rentabilidades, tbill, fin_ent, ini_prueba, fin_prueba, inicio="2016", zs=(1.0,)):
     """Optimiza con datos hasta fin_ent y devuelve el Sharpe de cada cartera en la prueba.
 
     rentabilidades: DataFrame de rentabilidades diarias de los activos.
-    tbill: Serie con la tasa libre de riesgo diaria, en porcentaje.
+    tbill: Serie con la tasa libre de riesgo anual, en porcentaje (un dato por día).
+    zs: valores de Z (credibilidad de las medias); Z = 1 es el máximo Sharpe sin shrinkage.
     """
     ent = rentabilidades.loc[inicio:fin_ent]
     prb = rentabilidades.loc[ini_prueba:fin_prueba]
     rf_e = tbill.loc[inicio:fin_ent].mean() / 100
     rf_p = tbill.loc[ini_prueba:fin_prueba].mean() / 100
 
-    mu_e = ent.mean().values * 252
     cov_e = ent.cov().values * 252
-    n = len(mu_e)
+    n = ent.shape[1]
     pesos = {
         "Pesos iguales": np.repeat(1 / n, n),
         "Mín. varianza": cartera_min_varianza(cov_e),
-        "Máx. Sharpe": cartera_max_sharpe(cov_e, mu_e, rf_e),
     }
+    for z in zs:
+        mu_z = medias_shrinkage(ent, z, rf_e).values
+        pesos[f"Máx. Sharpe (Z = {z})"] = cartera_max_sharpe(cov_e, mu_z, rf_e)
+
     sharpes = {}
     for nombre, w in pesos.items():
         r = pd.Series(prb.values @ w)
