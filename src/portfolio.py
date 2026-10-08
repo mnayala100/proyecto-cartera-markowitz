@@ -316,7 +316,7 @@ def remuestra_bloques(datos, bloque, rng):
     return np.vstack([datos[i:i + bloque] for i in inicios])
 
 
-def bootstrap_pesos_max_sharpe(rentabilidades, rf, n_rep=200, bloque=21, semilla=42, z=1.0):
+def bootstrap_pesos_max_sharpe(rentabilidades, rf, n_rep=1000, bloque=21, semilla=42, z=1.0):
     """Pesos de la cartera de máximo Sharpe en n_rep remuestreos de los datos.
 
     En cada remuestreo (por bloques) se reestiman las medias y las covarianzas
