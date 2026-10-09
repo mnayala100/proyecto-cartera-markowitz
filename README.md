@@ -27,6 +27,7 @@ El hilo conductor del proyecto es que **la cartera óptima en la muestra no es f
 .
 ├── data/              # CSV generados por los notebooks 01 y 02
 ├── notebooks/         # Análisis, en orden numérico
+├── figures/           # Figuras del documento PDF y script que las genera
 ├── src/
 │   └── portfolio.py   # Funciones reutilizables
 ├── requirements.txt
@@ -84,8 +85,8 @@ Funciones principales:
 
 1. **Con toda la muestra, el máximo Sharpe parece excelente.** La cartera de máximo Sharpe reparte un 58,3 % en oro y un 41,7 % en el S&P 500, con un Sharpe de 1,09 frente a 0,62 de la de pesos iguales. Es una cota optimista, porque se optimiza y se evalúa con los mismos datos (notebook 03).
 2. **Fuera de muestra el resultado depende de la fecha de corte.** Entrenando con 2016-2019 y probando en 2020-2025, el máximo Sharpe no supera a los pesos iguales (0,47 frente a 0,50). Entrenando con 2016-2022 y probando en 2023-2025, gana claramente (1,81 frente a 1,09). Una sola partición no valida una estrategia (notebooks 04 y 06).
-3. **Los pesos óptimos son muy inestables.** En el bootstrap por bloques (1000 remuestreos), el peso del oro oscila entre 0,30 y 0,83 y el del S&P 500 entre 0,16 y 0,67. El optimizador siempre elige entre oro y bolsa, pero la proporción depende de la muestra, y el resultado se mantiene con bloques de 5 a 63 días (notebook 05).
-4. **Con las diferencias dentro del error de estimación, no se puede afirmar que optimizar supere de forma fiable a repartir a partes iguales.** El error aproximado del Sharpe es ≈ 0,6 con 3 años de prueba y ≈ 0,4 con 6 años. El test de Jobson-Korkie-Memmel no encuentra diferencias frente a pesos iguales en 2020-2025 (p = 0,88) y sí en 2023-2025 (p = 0,02), un periodo excepcional para el oro: la ventaja depende del periodo (notebooks 05 y 06).
+3. **Los pesos óptimos son muy inestables.** En el bootstrap por bloques (1000 remuestreos), el peso del oro va del 30,0 % al 82,7 % (percentiles 5 y 95) y el del S&P 500 del 16,2 % al 66,9 %. El optimizador siempre elige entre oro y bolsa, pero la proporción depende de la muestra, y el resultado se mantiene con bloques de 5 a 63 días (notebook 05).
+4. **La ventaja de optimizar depende del periodo.** El test de Jobson-Korkie-Memmel no encuentra diferencias entre el máximo Sharpe y pesos iguales en 2020-2025 (p = 0,88), pero sí en 2023-2025 (p = 0,02), un periodo excepcional para el oro y la bolsa. Como la ventaja es significativa en un periodo e inexistente en el otro, no se puede afirmar que optimizar supere de forma fiable a repartir a partes iguales. El error aproximado del Sharpe es ≈ 0,6 con 3 años de prueba y ≈ 0,4 con 6 años (notebooks 05 y 06).
 5. **El riesgo de cola es mayor de lo que sugiere una normal.** El VaR histórico no se distingue del normal con la misma media y desviación típica, pero el TVaR histórico sí lo supera en las dos carteras y los dos niveles, y el resultado se mantiene con bloques de 1 a 42 días (notebook 07).
 6. **Cada cartera es vulnerable a shocks distintos.** En la caída del Covid (19 de febrero a 23 de marzo de 2020), pesos iguales perdió un 24,7 % y la cartera de oro y bolsa un 17,8 %; en 2022, cuando cayeron a la vez acciones y bonos, un 15,2 % frente a un 8,4 %. El 21 de octubre de 2025, con el oro cayendo un 6,43 %, la cartera concentrada perdió un 3,5 % frente al 1,4 % de pesos iguales (notebook 07).
 
