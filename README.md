@@ -41,9 +41,9 @@ El hilo conductor del proyecto es que **la cartera óptima en la muestra no es f
 | `02_rentabilidades` | Rentabilidad, volatilidad y Sharpe anuales de cada activo; matriz de covarianzas y correlaciones; efecto de la diversificación. |
 | `03_optimizacion` | Cartera de mínima varianza, frontera eficiente y cartera de máximo Sharpe (sin posiciones cortas). |
 | `04_backtest` | Backtest fuera de muestra con dos particiones temporales. |
-| `05_incertidumbre` | Error estándar de las medias y del Sharpe, bootstrap por bloques de los pesos óptimos y shrinkage de las rentabilidades esperadas. |
-| `06_backtest_shrinkage` | Backtest de la cartera de máximo Sharpe para distintos valores de Z (credibilidad de las medias históricas). |
-| `07_var_tvar` | VaR y TVaR históricos, validación con excedencias, comparación con una normal, incertidumbre por bootstrap y prueba de estrés. |
+| `05_incertidumbre` | Error estándar de las medias y del Sharpe (comprobado con Lo, Mertens y bootstrap), bootstrap por bloques de los pesos óptimos (1000 remuestreos, sensibilidad al tamaño de bloque y cartera remuestreada de Michaud) y shrinkage de las rentabilidades esperadas. |
+| `06_backtest_shrinkage` | Backtest de la cartera de máximo Sharpe para distintos valores de Z (credibilidad de las medias históricas) y test de Jobson-Korkie-Memmel para la diferencia de Sharpe frente a pesos iguales. |
+| `07_var_tvar` | VaR y TVaR históricos, validación con excedencias y test de Kupiec, comparación con una normal, incertidumbre por bootstrap y episodios de estrés (Covid, 2022 y 21 de octubre de 2025). |
 
 ## Cómo ejecutarlo
 
@@ -77,17 +77,17 @@ Funciones principales:
 | Optimización | `cartera_min_varianza`, `cartera_objetivo`, `frontera_eficiente`, `cartera_max_sharpe` |
 | Shrinkage | `medias_shrinkage` |
 | Resumen y backtest | `resumen_activos`, `backtest` |
-| Incertidumbre | `error_estandar_medias`, `error_estandar_sharpe`, `remuestra_bloques`, `bootstrap_pesos_max_sharpe`, `resumen_pesos` |
-| Riesgo de cola | `var_historico`, `tvar_historico`, `excedencias` |
+| Incertidumbre | `error_estandar_medias`, `error_estandar_sharpe`, `error_estandar_sharpe_lo`, `error_estandar_sharpe_bootstrap`, `test_sharpe_jkm`, `remuestra_bloques`, `bootstrap_pesos_max_sharpe`, `resumen_pesos` |
+| Riesgo de cola | `var_historico`, `tvar_historico`, `excedencias`, `test_kupiec` |
 
 ## Resultados principales
 
 1. **Con toda la muestra, el máximo Sharpe parece excelente.** La cartera de máximo Sharpe reparte un 58,3 % en oro y un 41,7 % en el S&P 500, con un Sharpe de 1,09 frente a 0,62 de la de pesos iguales. Es una cota optimista, porque se optimiza y se evalúa con los mismos datos (notebook 03).
 2. **Fuera de muestra el resultado depende de la fecha de corte.** Entrenando con 2016-2019 y probando en 2020-2025, el máximo Sharpe no supera a los pesos iguales (0,47 frente a 0,50). Entrenando con 2016-2022 y probando en 2023-2025, gana claramente (1,81 frente a 1,09). Una sola partición no valida una estrategia (notebooks 04 y 06).
-3. **Los pesos óptimos son muy inestables.** En el bootstrap por bloques (1000 remuestreos), el peso del oro oscila entre 0,30 y 0,83 y el del S&P 500 entre 0,16 y 0,67. El optimizador siempre elige entre oro y bolsa, pero la proporción depende de la muestra (notebook 05).
-4. **Con las diferencias dentro del error de estimación, no se puede afirmar que optimizar supere de forma fiable a repartir a partes iguales.** El error aproximado del Sharpe es ≈ 0,6 con 3 años de prueba y ≈ 0,4 con 6 años (notebook 06).
+3. **Los pesos óptimos son muy inestables.** En el bootstrap por bloques (1000 remuestreos), el peso del oro oscila entre 0,30 y 0,83 y el del S&P 500 entre 0,16 y 0,67. El optimizador siempre elige entre oro y bolsa, pero la proporción depende de la muestra, y el resultado se mantiene con bloques de 5 a 63 días (notebook 05).
+4. **Con las diferencias dentro del error de estimación, no se puede afirmar que optimizar supere de forma fiable a repartir a partes iguales.** El error aproximado del Sharpe es ≈ 0,6 con 3 años de prueba y ≈ 0,4 con 6 años. El test de Jobson-Korkie-Memmel no encuentra diferencias frente a pesos iguales en 2020-2025 (p = 0,88) y sí en 2023-2025 (p = 0,02), un periodo excepcional para el oro: la ventaja depende del periodo (notebooks 05 y 06).
 5. **El riesgo de cola es mayor de lo que sugiere una normal.** El VaR histórico no se distingue del normal con la misma media y desviación típica, pero el TVaR histórico sí lo supera en las dos carteras y los dos niveles, y el resultado se mantiene con bloques de 1 a 42 días (notebook 07).
-6. **Cada cartera es vulnerable a shocks distintos.** En la caída del Covid (19 de febrero a 23 de marzo de 2020), pesos iguales perdió un 24,7 % y la cartera de oro y bolsa un 17,8 %. El 21 de octubre de 2025, con el oro cayendo un 6,43 %, la cartera concentrada perdió un 3,5 % frente al 1,4 % de pesos iguales (notebook 07).
+6. **Cada cartera es vulnerable a shocks distintos.** En la caída del Covid (19 de febrero a 23 de marzo de 2020), pesos iguales perdió un 24,7 % y la cartera de oro y bolsa un 17,8 %; en 2022, cuando cayeron a la vez acciones y bonos, un 15,2 % frente a un 8,4 %. El 21 de octubre de 2025, con el oro cayendo un 6,43 %, la cartera concentrada perdió un 3,5 % frente al 1,4 % de pesos iguales (notebook 07).
 
 ## Limitaciones
 

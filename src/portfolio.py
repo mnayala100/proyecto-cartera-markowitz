@@ -15,13 +15,15 @@ Organización del archivo:
     2. Optimización de carteras
     3. Rentabilidades esperadas con shrinkage
     4. Resumen de activos y backtest
-    5. Incertidumbre de la estimación (error estándar y bootstrap)
-    6. Riesgo de cola (VaR, TVaR y excedencias)
+    5. Incertidumbre de la estimación (error estándar, bootstrap y test de Sharpe)
+    6. Riesgo de cola (VaR, TVaR, excedencias y test de Kupiec)
 """
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from scipy.special import xlogy
+from scipy.stats import chi2, kurtosis, norm, skew
 
 
 # =============================================================================
@@ -292,6 +294,95 @@ def error_estandar_sharpe(rentabilidades):
     return 1 / np.sqrt(len(rentabilidades) / 252)
 
 
+def error_estandar_sharpe_lo(rend, rf=0.0):
+    """Error estándar del Sharpe anual calculado con los rendimientos diarios.
+
+    Aplica la fórmula de Lo (2002) a la frecuencia de los datos (diaria) y la
+    pasa a anual multiplicando por la raíz de 252:
+
+        Lo (normal):       raíz((1 + SR²/2) / n)
+        Mertens (2002):    raíz((1 + SR²/2 - asimetría·SR + (curtosis - 3)/4·SR²) / n)
+
+    con SR el Sharpe diario y n el número de días. La versión de Mertens corrige
+    por asimetría y colas gruesas. Ojo: usar la fórmula con el Sharpe anual y los
+    años de datos sobrestima el error, porque mezcla frecuencias.
+
+    Parámetros:
+        rend: rendimientos diarios (Serie o array) de una cartera.
+        rf: tasa libre de riesgo anual, en tanto por uno.
+    Devuelve:
+        Serie con el Sharpe anual y sus dos errores estándar (Lo y Mertens).
+    """
+    exceso = np.asarray(rend) - rf / 252
+    n = len(exceso)
+    sr = exceso.mean() / exceso.std(ddof=1)
+    asim, exc_curt = skew(exceso), kurtosis(exceso)   # kurtosis() da la curtosis en exceso (normal = 0)
+    var_lo = (1 + sr**2 / 2) / n
+    var_mertens = (1 + sr**2 / 2 - asim * sr + exc_curt / 4 * sr**2) / n
+    return pd.Series({
+        "Sharpe anual": sr * np.sqrt(252),
+        "Error estándar (Lo)": np.sqrt(252 * var_lo),
+        "Error estándar (Mertens)": np.sqrt(252 * var_mertens),
+    })
+
+
+def error_estandar_sharpe_bootstrap(rend, rf=0.0, n_rep=1000, bloque=21, semilla=42):
+    """Error estándar del Sharpe anual por bootstrap por bloques.
+
+    No supone normalidad ni independencia entre días: remuestrea bloques de días
+    consecutivos, recalcula el Sharpe y toma la desviación típica de los n_rep valores.
+
+    Parámetros:
+        rend: rendimientos diarios (Serie o array) de una cartera.
+        rf: tasa libre de riesgo anual, en tanto por uno.
+        n_rep: número de remuestreos.
+        bloque: días de cada bloque.
+        semilla: semilla del generador aleatorio.
+    Devuelve:
+        El error estándar del Sharpe anual (un número).
+    """
+    rng = np.random.default_rng(semilla)
+    exceso = (np.asarray(rend) - rf / 252).reshape(-1, 1)
+    sharpes = []
+    for _ in range(n_rep):
+        m = remuestra_bloques(exceso, bloque, rng)[:, 0]
+        sharpes.append(m.mean() / m.std(ddof=1) * np.sqrt(252))
+    return float(np.std(sharpes, ddof=1))
+
+
+def test_sharpe_jkm(rend1, rend2, rf=0.0):
+    """Test de diferencia de Sharpe de Jobson y Korkie (1981) con la corrección de Memmel (2003).
+
+    Compara dos carteras evaluadas en los mismos días. Tiene en cuenta su
+    correlación: si las dos carteras se mueven juntas, la diferencia entre sus
+    Sharpe se mide con más precisión. Supone rendimientos independientes y normales.
+
+        z = (SR1 - SR2) / raíz((2 - 2ρ + (SR1² + SR2² - 2·SR1·SR2·ρ²) / 2) / n)
+
+    con Sharpe diarios, ρ la correlación de los excesos de rentabilidad y n los días.
+
+    Parámetros:
+        rend1, rend2: rendimientos diarios de las dos carteras (mismos días).
+        rf: tasa libre de riesgo anual, en tanto por uno.
+    Devuelve:
+        Serie con la diferencia de Sharpe anual (1 - 2), la correlación, el
+        estadístico z y el p-valor bilateral.
+    """
+    e1 = np.asarray(rend1) - rf / 252
+    e2 = np.asarray(rend2) - rf / 252
+    n = len(e1)
+    sr1, sr2 = e1.mean() / e1.std(ddof=1), e2.mean() / e2.std(ddof=1)
+    rho = np.corrcoef(e1, e2)[0, 1]
+    var = (2 - 2 * rho + 0.5 * (sr1**2 + sr2**2 - 2 * sr1 * sr2 * rho**2)) / n
+    z = (sr1 - sr2) / np.sqrt(var)
+    return pd.Series({
+        "Diferencia de Sharpe anual": (sr1 - sr2) * np.sqrt(252),
+        "Correlación": rho,
+        "z": z,
+        "p-valor": 2 * (1 - norm.cdf(abs(z))),
+    })
+
+
 def remuestra_bloques(datos, bloque, rng):
     """Remuestreo por bloques (block bootstrap): pega bloques de días consecutivos al azar.
 
@@ -411,3 +502,32 @@ def excedencias(rend, var):
         El número de días (un entero) con pérdida mayor que `var`.
     """
     return int((-np.asarray(rend) > var).sum())
+
+
+def test_kupiec(n_exc, n_dias, nivel=0.95):
+    """Test de Kupiec (1995) de proporción de fallos para validar un VaR.
+
+    Contrasta si la proporción de excedencias observada (n_exc / n_dias) es
+    compatible con la esperada (1 - nivel). El estadístico de razón de
+    verosimilitudes sigue una chi-cuadrado con 1 grado de libertad:
+
+        LR = -2 · [ln((1-p)^(T-x) · p^x) - ln((1-x/T)^(T-x) · (x/T)^x)]
+
+    Un p-valor pequeño indica demasiadas excedencias (VaR que se queda corto) o
+    demasiado pocas (VaR excesivamente prudente).
+
+    Parámetros:
+        n_exc: número de excedencias observadas (por ejemplo, de `excedencias`).
+        n_dias: número de días evaluados.
+        nivel: nivel de confianza del VaR, entre 0 y 1.
+    Devuelve:
+        Serie con el estadístico LR y su p-valor.
+    """
+    p = 1 - nivel
+    x, T = n_exc, n_dias
+    ph = x / T
+    # xlogy(a, b) = a·ln(b) y vale 0 cuando a = 0 (caso sin excedencias)
+    log_h0 = xlogy(T - x, 1 - p) + xlogy(x, p)
+    log_h1 = xlogy(T - x, 1 - ph) + xlogy(x, ph)
+    lr = -2 * (log_h0 - log_h1)
+    return pd.Series({"LR": lr, "p-valor": 1 - chi2.cdf(lr, 1)})
